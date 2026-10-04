@@ -7,51 +7,68 @@ import plotly.graph_objects as go
 import networkx as nx
 
 # -------------------------------------------------------------------
-# Page Config & Custom Clean CSS (Hides Header Anchor Links)
+# Page Config & Custom Design (NO EMOJIS)
 # -------------------------------------------------------------------
 st.set_page_config(page_title="Power Grid N-1 & ACOPF Analyzer", layout="wide", initial_sidebar_state="expanded")
 
+# CUSTOM CSS: Minimalist Power Grid Background and Emoji-Free UI
 st.markdown("""
     <style>
+    /* SOLID MINIMALIST TECH BACKGROUND */
     .stApp { 
         background-color: #0E1117; 
+        background-image: 
+            linear-gradient(rgba(14, 17, 23, 0.95), rgba(14, 17, 23, 0.98)),
+            url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48ZyBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiM5Q0IxRjUiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTAgMGg0MHY0MEgwVjB6bTIwIDIwaDIwdjIwSDIWMjB6TTAgMjBoMjB2MjBIMFYyMHoyMCAwaDIwdjIwSDIwVjB6Ii8+PC9nPjwvZz48L3N2Zz4=');
         color: #E0E6ED; 
     }
-    div[data-testid="stMetricValue"] { 
-        font-size: 1.6rem !important; 
-        font-weight: 700; 
-        color: #58A6FF; 
-    }
-    .stButton>button { 
-        width: 100%; 
-        background-color: #238636; 
-        color: white; 
-        border: none; 
-        border-radius: 6px; 
-        padding: 0.5rem 1rem; 
-        font-weight: 600; 
-    }
-    .stButton>button:hover { 
-        background-color: #2EA043; 
+    
+    [data-testid="stSidebar"] {
+        background-color: transparent !important;
+        border-right: 1px solid rgba(156, 177, 245, 0.1) !important;
     }
 
-    /* HIDE STREAMLIT HEADER COPY-LINK ANCHOR SYMBOLS */
+    /* REMOVE HEADER ANCHOR LINKS (CLEAN LOOK) */
     a.header-anchor {
         display: none !important;
     }
     a[href^="#"] {
         display: none !important;
     }
+
+    /* Typography & Metric Styling */
+    div[data-testid="stMetricValue"] { 
+        font-size: 1.6rem !important; 
+        font-weight: 700; 
+        color: #58A6FF; /* Accent blue for data */
+    }
+    
+    /* Clean Green Button (Matches image 6) */
+    .stButton>button { 
+        width: 100%; 
+        background-color: #238636; 
+        color: white; 
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 6px; 
+        padding: 0.5rem 1rem; 
+        font-weight: 600; 
+        transition: background-color 0.2s;
+    }
+    .stButton>button:hover { 
+        background-color: #2EA043; 
+        border: 1px solid rgba(255,255,255,0.2);
+    }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ Power Grid N-1 Contingency & ACOPF Optimization Suite")
+# Main Title & Description (EMOJI FREE)
+st.title("POWER GRID N-1 CONTINGENCY & ACOPF OPTIMIZATION SUITE")
 st.caption("Real-time steady-state AC load flow, ACOPF cost optimization dispatch, and interactive N-1 reliability analyzer.")
 
 # -------------------------------------------------------------------
-# Sidebar Simulation Controls
+# Sidebar Simulation Controls (Clean Headers)
 # -------------------------------------------------------------------
-st.sidebar.header("⚙️ Simulation Controls")
+st.sidebar.markdown("### Simulation Controls")
 load_scaling = st.sidebar.slider("Grid Load Scaling Factor (%)", min_value=50, max_value=250, value=120, step=10) / 100.0
 line_rating_mva = st.sidebar.slider("Line Rating Limit (MVA)", min_value=50, max_value=500, value=150, step=10)
 max_voltage = st.sidebar.slider("Max Voltage Limit (p.u.)", 1.00, 1.10, 1.05, 0.01)
@@ -60,19 +77,20 @@ min_voltage = st.sidebar.slider("Min Voltage Limit (p.u.)", 0.90, 1.00, 0.95, 0.
 # -------------------------------------------------------------------
 # Grid Model Builder Function
 # -------------------------------------------------------------------
-def get_configured_network(scale, mva_limit, v_min, v_max):
-    net = pn.case14()
-    
-    # Scale demand
+@st.cache_resource
+def get_configured_network():
+    return pn.case14()
+
+base_net = get_configured_network()
+
+def update_network_parameters(scale, mva_limit, v_min, v_max):
+    import copy
+    net = copy.deepcopy(base_net)
     net.load["p_mw"] *= scale
     net.load["q_mvar"] *= scale
-    
-    # Operational voltage boundaries
     net.bus["min_vm_pu"] = v_min
     net.bus["max_vm_pu"] = v_max
     
-    # Convert MVA rating limit to max current capacity (kA) per bus voltage level
-    # I_max (kA) = S_max (MVA) / (sqrt(3) * V_nominal_kV)
     for idx, line in net.line.iterrows():
         from_bus_vn = net.bus.loc[line["from_bus"], "vn_kv"]
         max_i_ka = mva_limit / (1.732 * from_bus_vn)
@@ -80,13 +98,13 @@ def get_configured_network(scale, mva_limit, v_min, v_max):
         
     return net
 
-net = get_configured_network(load_scaling, line_rating_mva, min_voltage, max_voltage)
+net = update_network_parameters(load_scaling, line_rating_mva, min_voltage, max_voltage)
 
-# Tab Navigation Layout
-tab1, tab2, tab3 = st.tabs(["📊 Grid Dashboard", "⚡ ACOPF Optimization", "🔍 Interactive Outage Inspector"])
+# Tab Navigation Layout (EMOJI FREE)
+tab1, tab2, tab3 = st.tabs(["Grid Dashboard", "ACOPF Optimization", "Interactive Outage Inspector"])
 
 # -------------------------------------------------------------------
-# TAB 1: Baseline Dashboard & N-1 Contingency Scanner
+# TAB 1: Grid Dashboard & N-1 Contingency Scanner
 # -------------------------------------------------------------------
 with tab1:
     try:
@@ -100,9 +118,9 @@ with tab1:
         total_p = net.res_load.p_mw.sum()
         total_q = net.res_load.q_mvar.sum()
         total_s = np.sqrt(total_p**2 + total_q**2)
-        system_pf = total_p / total_s if total_s > 0 else 1.0
         losses_mw = net.res_line.pl_mw.sum()
-        overloaded_lines_count = len(net.res_line[net.res_line.loading_percent > 100.0])
+        in_service_lines = net.line[net.line.in_service == True].index
+        overloaded_lines_count = len(net.res_line.loc[in_service_lines][net.res_line.loc[in_service_lines].loading_percent > 100.0])
         
         mcol1, mcol2, mcol3, mcol4 = st.columns(4)
         mcol1.metric("Active Demand (P)", f"{total_p:.1f} MW")
@@ -110,7 +128,7 @@ with tab1:
         mcol3.metric("Transmission Losses", f"{losses_mw:.2f} MW")
         mcol4.metric("N-0 Overloaded Lines", f"{overloaded_lines_count}", delta_color="inverse")
     else:
-        st.error("⚠ Baseline Load Flow Diverged! Demand exceeds network transmission capacity.")
+        st.error("Baseline Load Flow Diverged! Demand exceeds network transmission capacity.")
 
     st.divider()
 
@@ -124,13 +142,14 @@ with tab1:
             net.line.loc[line_idx, "in_service"] = False
             try:
                 pp.runpp(net, numba=False)
-                max_load = net.res_line.loading_percent.max()
-                overloads = len(net.res_line[net.res_line.loading_percent > 100.0])
+                active_lines = net.line[net.line.in_service == True].index
+                max_load = net.res_line.loc[active_lines].loading_percent.max()
+                overloads = len(net.res_line.loc[active_lines][net.res_line.loc[active_lines].loading_percent > 100.0])
                 v_violations = len(net.res_bus[(net.res_bus.vm_pu < min_voltage) | (net.res_bus.vm_pu > max_voltage)])
                 status = "CRITICAL" if overloads > 0 or v_violations > 0 else "STABLE"
                 
                 results.append({
-                    "Tripped Line": f"Line {line_idx} (Bus {net.line.loc[line_idx, 'from_bus']} ➔ {net.line.loc[line_idx, 'to_bus']})",
+                    "Tripped Line": f"Line {line_idx} (Bus {net.line.loc[line_idx, 'from_bus']} -> Bus {net.line.loc[line_idx, 'to_bus']})",
                     "Status": status,
                     "Max Line Loading (%)": round(max_load, 1),
                     "Overloaded Lines": overloads,
@@ -139,7 +158,7 @@ with tab1:
                 })
             except Exception:
                 results.append({
-                    "Tripped Line": f"Line {line_idx} (Bus {net.line.loc[line_idx, 'from_bus']} ➔ {net.line.loc[line_idx, 'to_bus']})",
+                    "Tripped Line": f"Line {line_idx} (Bus {net.line.loc[line_idx, 'from_bus']} -> Bus {net.line.loc[line_idx, 'to_bus']})",
                     "Status": "BLACKOUT / DIVERGED",
                     "Max Line Loading (%)": None,
                     "Overloaded Lines": None,
@@ -155,8 +174,8 @@ with tab1:
 
         def color_status(val):
             if val == "CRITICAL" or val == "BLACKOUT / DIVERGED":
-                return 'background-color: #7A1C1C; color: #FF8585; font-weight: bold;'
-            return 'background-color: #1C3B2B; color: #58D68D;'
+                return 'background-color: #3D1414; color: #FF7B7B; font-weight: bold;'
+            return 'background-color: #122B1E; color: #58D68D;'
 
         st.dataframe(df_results.style.map(color_status, subset=['Status']), width="stretch")
 
@@ -164,19 +183,20 @@ with tab1:
 # TAB 2: ACOPF Cost Minimization Engine
 # -------------------------------------------------------------------
 with tab2:
-    st.subheader("⚙️ AC Optimal Power Flow (ACOPF) Fuel Cost Minimization")
+    st.subheader("AC Optimal Power Flow (ACOPF) Fuel Cost Minimization")
     st.write("ACOPF redispatches generator active power outputs to minimize operational fuel cost while satisfying line thermal ratings and bus voltage limits.")
     
     if st.button("Execute ACOPF Dispatch Optimization"):
         try:
-            # Set up polynomial operational cost ($/MWh) for generators
+            for poly_cost_type in ['gen', 'ext_grid']:
+                if poly_cost_type in net:
+                    net[poly_cost_type].drop(net[poly_cost_type].index, inplace=True)
+            
             for g_idx in net.gen.index:
                 pp.create_poly_cost(net, g_idx, 'gen', cp1_eur_per_mw=20.0, cp2_eur_per_mw2=0.1)
             pp.create_poly_cost(net, 0, 'ext_grid', cp1_eur_per_mw=10.0, cp2_eur_per_mw2=0.05)
             
-            # Enforce line thermal loading limit (100%)
             net.line["max_loading_percent"] = 100.0
-            
             pp.runopp(net)
             
             st.success("ACOPF Optimization Converged Successfully!")
@@ -199,15 +219,15 @@ with tab2:
             st.error(f"ACOPF Diverged: {e}. Network is heavily congested under current load scale.")
 
 # -------------------------------------------------------------------
-# TAB 3: Interactive Outage Inspector & Topology Map
+# TAB 3: Interactive Topology Map
 # -------------------------------------------------------------------
 with tab3:
-    st.subheader("🌐 Interactive Line Outage & Network Topology Map")
+    st.subheader("Interactive Line Outage & Network Topology Map")
     
     selected_line = st.selectbox(
         "Select a Transmission Line to Trip (Simulate Specific N-1 Outage):",
         options=[-1] + list(net.line.index),
-        format_func=lambda x: "All Lines In Service (Normal State)" if x == -1 else f"Trip Line {x} (Bus {net.line.loc[x, 'from_bus']} ➔ Bus {net.line.loc[x, 'to_bus']})"
+        format_func=lambda x: "All Lines In Service (Normal State)" if x == -1 else f"Trip Line {x} (Bus {net.line.loc[x, 'from_bus']} -> Bus {net.line.loc[x, 'to_bus']})"
     )
     
     if selected_line != -1:
@@ -240,21 +260,21 @@ with tab3:
             p_mw = net.res_line.loc[idx, "p_from_mw"]
             
             if loading >= 100.0:
-                line_color = "#FF4B4B"
-                line_width = 4
+                line_color = "#F85149"
+                line_width = 3.5
             elif loading >= 70.0:
-                line_color = "#FFAA00"
-                line_width = 3
-            else:
-                line_color = "#2EA043"
+                line_color = "#D29922"
                 line_width = 2.5
+            else:
+                line_color = "#3FB950"
+                line_width = 2.0
 
             fig.add_trace(go.Scatter(
                 x=[x0, x1], y=[y0, y1],
                 mode='lines',
                 line=dict(width=line_width, color=line_color),
                 hoverinfo='text',
-                text=f"Line {idx} (Bus {from_bus} ➔ Bus {to_bus})<br>Loading: {loading:.1f}%<br>Power Flow: {p_mw:.2f} MW"
+                text=f"Line {idx} (Bus {from_bus} -> Bus {to_bus})<br>Loading: {loading:.1f}%<br>Power Flow: {p_mw:.2f} MW"
             ))
 
     node_x = [pos[node][0] for node in G.nodes()]
@@ -267,7 +287,7 @@ with tab3:
         hoverinfo='text',
         text=bus_labels,
         textposition="top center",
-        marker=dict(size=20, color='#1F6FE5', line=dict(width=2, color='#FFFFFF'))
+        marker=dict(size=18, color='#58A6FF', line=dict(width=1.5, color='#FFFFFF'))
     ))
 
     fig.update_layout(
