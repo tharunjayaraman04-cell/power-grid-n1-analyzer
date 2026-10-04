@@ -1,63 +1,38 @@
-# Power Grid N-1 Contingency & Optimal Power Flow (ACOPF) Analyzer
+# Power Grid N-1 Contingency & ACOPF Optimization Suite
 
-An interactive power systems analysis suite built in Python using Pandapower, Streamlit, and Plotly. This tool models transmission grid steady-state behavior, executes AC Optimal Power Flow (ACOPF) cost optimization, and performs automated N-1 contingency scans to evaluate grid security under dynamic load stress.
+An interactive, web-based power system analysis suite built to simulate steady-state AC load flow, perform automated N-1 grid reliability scans, and optimize generator dispatch costs using AC Optimal Power Flow (ACOPF) on the IEEE 14-bus test system.
+
+Live Interactive Web Application: https://power-grid-n1-analyzer.streamlit.app
 
 ---
 
 ## Key Features
 
-* AC Load Flow Analysis: Solves non-linear power flow equations on benchmark IEEE networks using Newton-Raphson numerical solvers.
-* AC Optimal Power Flow (ACOPF): Optimizes generator active power dispatch to minimize hourly generation fuel cost while enforcing voltage bounds (0.95 to 1.05 p.u.) and transmission line thermal limits.
-* Automated N-1 Contingency Scanner: Iteratively simulates single transmission line trip events (N-1), identifying critical points of failure, thermal line overloads (above 100%), and bus voltage security violations.
-* Interactive Streamlit Dashboard: Real-time parameter controls for grid load scaling, voltage bounds adjustments, and dynamic network topology heatmaps.
+* Steady-State AC Load Flow Analysis: Executes Newton-Raphson load flow to compute active power (P), reactive power (Q), transmission losses, voltage magnitudes (V_i), and system power factor.
+* Voltage-Adjusted Thermal Loading Engine: Converts line MVA thermal limits into bus-voltage-adjusted current capacities (I_max in kA), ensuring accurate percentage loading calculations without numerical divergence.
+* AC Optimal Power Flow (ACOPF): Redispatches active generator power (P_g) using polynomial cost curves to minimize total operational costs while enforcing branch thermal ratings and bus voltage limits.
+* Automated N-1 Contingency Scanner: Iteratively isolates individual transmission lines across the network to identify critical points of failure, line overloads, and low-voltage security violations.
+* Interactive Network Topology Map: Renders network graphs using NetworkX and Plotly, featuring dynamic line color-coding (Green for normal, Orange for heavy load, Red for critical overload) and hover telemetry.
+* Single Outage Inspector: Allows users to simulate specific line trips via a dropdown selector to observe immediate post-contingency voltage drops and power flow redistributions.
 
 ---
 
 ## Tech Stack & Dependencies
 
-* Language: Python 3.10+
-* Power Systems Engine: pandapower
-* Data & Numerical Processing: numpy, pandas, scipy
-* Frontend & Visualization: streamlit, plotly, networkx
+* Core Language: Python 3.x
+* Power Systems Engine: pandapower (built on scipy non-linear solvers)
+* Frontend & Dashboard: streamlit
+* Data Visualization & Graphs: plotly, networkx
+* Data Processing: pandas, numpy
 
 ---
 
 ## Quick Start & Installation
 
-1. Clone the repository:
-   git clone https://github.com/your-username/power-grid-n1-analyzer.git
-   cd power-grid-n1-analyzer
-
-2. Install dependencies:
-   pip install -r requirements.txt
-
-3. Launch the Web Dashboard:
-   streamlit run app.py
-   (Access the web app at http://localhost:8501 in your browser)
-
----
-
-## System Architecture & Methodology
-
-[ IEEE 14-Bus Test Case ] ---> [ Load Scaling Engine ] ---> [ Newton-Raphson AC Load Flow ]
-                                                                     |
-                                                                     +---> [ ACOPF Generator Dispatch ]
-                                                                     +---> [ Iterative N-1 Contingency Loop ]
-                                                                                     |
-                                                                                     v
-                                                                     [ Streamlit Interactive Dashboard ]
-
----
-
-## Project Structure
-
-power-grid-n1-analyzer/
-├── app.py                      # Interactive Streamlit Web Application
-├── phase1_grid_starter.py      # Baseline Load Flow & ACOPF Script
-├── phase2_contingency_scanner.py # Command-line N-1 Contingency Scanner
-├── requirements.txt            # Project Dependencies
-└── README.md                   # Project Documentation
-
+### 1. Clone the repository
+```bash
+git clone [https://github.com/tharunjayaraman04-cell/power-grid-n1-analyzer.git](https://github.com/tharunjayaraman04-cell/power-grid-n1-analyzer.git)
+cd power-grid-n1-analyzer
 ---
 
 ## License
