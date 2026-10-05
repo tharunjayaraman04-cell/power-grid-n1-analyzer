@@ -7,28 +7,52 @@ import plotly.graph_objects as go
 import networkx as nx
 
 # -------------------------------------------------------------------
-# Page Config & Custom Design (NO EMOJIS)
+# Page Config & Pure Minimalist Theme (Emoji Free)
 # -------------------------------------------------------------------
 st.set_page_config(page_title="Power Grid N-1 & ACOPF Analyzer", layout="wide", initial_sidebar_state="expanded")
 
-# CUSTOM CSS: Minimalist Power Grid Background and Emoji-Free UI
+# CUSTOM CSS: Sets bold engineering metrics, hides links, forces clean monospace for top info
 st.markdown("""
     <style>
-    /* SOLID MINIMALIST TECH BACKGROUND */
+    /* SOLID DARK BACKGROUND */
     .stApp { 
-        background-color: #0E1117; 
-        background-image: 
-            linear-gradient(rgba(14, 17, 23, 0.95), rgba(14, 17, 23, 0.98)),
-            url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48ZyBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiM5Q0IxRjUiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTAgMGg0MHY0MEgwVjB6bTIwIDIwaDIwdjIwSDIWMjB6TTAgMjBoMjB2MjBIMFYyMHoyMCAwaDIwdjIwSDIwVjB6Ii8+PC9nPjwvZz48L3N2Zz4=');
-        color: #E0E6ED; 
+        background-color: #0D1117; 
+        color: #C9D1D9; 
     }
     
     [data-testid="stSidebar"] {
-        background-color: transparent !important;
-        border-right: 1px solid rgba(156, 177, 245, 0.1) !important;
+        background-color: #161B22 !important;
+        border-right: 1px solid #30363D !important;
     }
 
-    /* REMOVE HEADER ANCHOR LINKS (CLEAN LOOK) */
+    /* TYPOGRAPHY FIXES FROM CRITIQUE */
+    /* Fix 1: Make top engineering info text sharp, clean, and unbolded (monospace) */
+    .stMarkdown div p {
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+        font-weight: 400 !important;
+        letter-spacing: 0.05rem;
+    }
+
+    /* Fix 2: Significantly increase font size and contrast of main subtitle */
+    .css-1avcm0n { /* Main caption selector */
+        font-size: 1.1rem !important; 
+        color: #E6EDF3 !important; 
+        margin-bottom: 1rem;
+    }
+
+    /* HIGH-CONTRAST METRICS */
+    div[data-testid="stMetricValue"] { 
+        font-size: 1.8rem !important; 
+        font-weight: 700; 
+        color: #58A6FF !important; 
+    }
+    
+    div[data-testid="stMetricLabel"] {
+        font-size: 0.9rem !important;
+        color: #8B949E !important;
+    }
+
+    /* REMOVE HEADER ANCHOR LINKS */
     a.header-anchor {
         display: none !important;
     }
@@ -36,37 +60,34 @@ st.markdown("""
         display: none !important;
     }
 
-    /* Typography & Metric Styling */
-    div[data-testid="stMetricValue"] { 
-        font-size: 1.6rem !important; 
-        font-weight: 700; 
-        color: #58A6FF; /* Accent blue for data */
-    }
-    
-    /* Clean Green Button (Matches image 6) */
+    /* CLEAN FLAT BUTTON (Matches design style) */
     .stButton>button { 
         width: 100%; 
         background-color: #238636; 
-        color: white; 
-        border: 1px solid rgba(255,255,255,0.1);
+        color: #FFFFFF; 
+        border: 1px solid #2EA043;
         border-radius: 6px; 
         padding: 0.5rem 1rem; 
         font-weight: 600; 
-        transition: background-color 0.2s;
     }
     .stButton>button:hover { 
         background-color: #2EA043; 
-        border: 1px solid rgba(255,255,255,0.2);
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Main Title & Description (EMOJI FREE)
-st.title("POWER GRID N-1 CONTINGENCY & ACOPF OPTIMIZATION SUITE")
+# Main Title & Subtitle (EMOJI FREE)
+st.title("Power Grid N-1 Contingency & ACOPF Optimization Suite")
+# Increased font-size subtitle
 st.caption("Real-time steady-state AC load flow, ACOPF cost optimization dispatch, and interactive N-1 reliability analyzer.")
 
+# CRITIQUE FIX: Engineering Data Callout
+# This is nice on top, now using custom monospace CSS for sharp unbolded font
+st.write("**SYSTEM: IEEE 14-BUS TEST CASE | SYSTEM BASE MVA: 100**")
+
+
 # -------------------------------------------------------------------
-# Sidebar Simulation Controls (Clean Headers)
+# Sidebar Controls
 # -------------------------------------------------------------------
 st.sidebar.markdown("### Simulation Controls")
 load_scaling = st.sidebar.slider("Grid Load Scaling Factor (%)", min_value=50, max_value=250, value=120, step=10) / 100.0
@@ -75,22 +96,37 @@ max_voltage = st.sidebar.slider("Max Voltage Limit (p.u.)", 1.00, 1.10, 1.05, 0.
 min_voltage = st.sidebar.slider("Min Voltage Limit (p.u.)", 0.90, 1.00, 0.95, 0.01)
 
 # -------------------------------------------------------------------
-# Grid Model Builder Function
+# Grid Model Builder
 # -------------------------------------------------------------------
 @st.cache_resource
 def get_configured_network():
-    return pn.case14()
+    # Base network is IEEE 14-bus test case (statically cached)
+    net = pn.case14()
+    # Add bus types explicitly for visualization
+    net.bus.loc[0, 'type'] = 'SL' # Slack
+    for idx in net.ext_grid.bus:
+         net.bus.loc[idx, 'type'] = 'PV' # Gen
+    for idx in net.gen.bus:
+         if net.bus.loc[idx, 'type'] != 'SL':
+              net.bus.loc[idx, 'type'] = 'PV' # Gen
+    net.bus['type'].fillna('PQ', inplace=True) # Load
+    return net
 
 base_net = get_configured_network()
 
 def update_network_parameters(scale, mva_limit, v_min, v_max):
     import copy
     net = copy.deepcopy(base_net)
+    
+    # Scale demand
     net.load["p_mw"] *= scale
     net.load["q_mvar"] *= scale
+    
+    # Operational voltage boundaries
     net.bus["min_vm_pu"] = v_min
     net.bus["max_vm_pu"] = v_max
     
+    # Convert MVA rating limit to max current capacity (kA) per bus voltage level
     for idx, line in net.line.iterrows():
         from_bus_vn = net.bus.loc[line["from_bus"], "vn_kv"]
         max_i_ka = mva_limit / (1.732 * from_bus_vn)
@@ -100,11 +136,11 @@ def update_network_parameters(scale, mva_limit, v_min, v_max):
 
 net = update_network_parameters(load_scaling, line_rating_mva, min_voltage, max_voltage)
 
-# Tab Navigation Layout (EMOJI FREE)
+# Tab Navigation (Emoji Free)
 tab1, tab2, tab3 = st.tabs(["Grid Dashboard", "ACOPF Optimization", "Interactive Outage Inspector"])
 
 # -------------------------------------------------------------------
-# TAB 1: Grid Dashboard & N-1 Contingency Scanner
+# TAB 1: Grid Dashboard & N-1 Scan
 # -------------------------------------------------------------------
 with tab1:
     try:
@@ -138,6 +174,7 @@ with tab1:
         num_lines = len(net.line)
         progress_bar = st.progress(0)
         
+        # Iterative N-1 loop
         for i, line_idx in enumerate(net.line.index):
             net.line.loc[line_idx, "in_service"] = False
             try:
@@ -188,6 +225,7 @@ with tab2:
     
     if st.button("Execute ACOPF Dispatch Optimization"):
         try:
+            # Set up polynomial operational cost ($/MWh) for generators
             for poly_cost_type in ['gen', 'ext_grid']:
                 if poly_cost_type in net:
                     net[poly_cost_type].drop(net[poly_cost_type].index, inplace=True)
@@ -196,6 +234,7 @@ with tab2:
                 pp.create_poly_cost(net, g_idx, 'gen', cp1_eur_per_mw=20.0, cp2_eur_per_mw2=0.1)
             pp.create_poly_cost(net, 0, 'ext_grid', cp1_eur_per_mw=10.0, cp2_eur_per_mw2=0.05)
             
+            # Enforce line thermal loading limit (100%)
             net.line["max_loading_percent"] = 100.0
             pp.runopp(net)
             
@@ -219,10 +258,10 @@ with tab2:
             st.error(f"ACOPF Diverged: {e}. Network is heavily congested under current load scale.")
 
 # -------------------------------------------------------------------
-# TAB 3: Interactive Topology Map
+# TAB 3: Interactive Single-Line Diagram Outage Inspector
 # -------------------------------------------------------------------
 with tab3:
-    st.subheader("Interactive Line Outage & Network Topology Map")
+    st.subheader("Interactive Line Outage & Structured Single-Line Diagram")
     
     selected_line = st.selectbox(
         "Select a Transmission Line to Trip (Simulate Specific N-1 Outage):",
@@ -230,6 +269,7 @@ with tab3:
         format_func=lambda x: "All Lines In Service (Normal State)" if x == -1 else f"Trip Line {x} (Bus {net.line.loc[x, 'from_bus']} -> Bus {net.line.loc[x, 'to_bus']})"
     )
     
+    # Apply the interactive N-1 outage
     if selected_line != -1:
         net.line.loc[selected_line, "in_service"] = False
         
@@ -243,10 +283,29 @@ with tab3:
     for idx in net.bus.index:
         G.add_node(idx)
 
-    pos = nx.spring_layout(G, seed=42)
+    # CRITIQUE FIX: STRUCTURED SINGLE-LINE LAYOUT
+    # Defining specific coordinates (x, y) for IEEE 14-bus diagram layout
+    pos = {
+        0: (0.0, 1.0),   # Slack (Bus 1)
+        1: (0.5, 1.0),   # PQ (Bus 2)
+        2: (1.0, 1.0),   # PQ (Bus 3)
+        3: (1.5, 1.0),   # PQ (Bus 4)
+        4: (2.0, 1.0),   # PQ (Bus 5)
+        5: (0.5, 0.5),   # PV Gen (Bus 6)
+        6: (1.5, 0.5),   # PQ (Bus 7)
+        7: (2.0, 0.5),   # PQ (Bus 8)
+        8: (1.5, 0.0),   # PQ (Bus 9)
+        9: (2.0, 0.0),   # PQ (Bus 10)
+        10: (0.5, 0.0),  # PQ (Bus 11)
+        11: (1.0, 0.0),  # PQ (Bus 12)
+        12: (1.0, 0.5),  # PQ (Bus 13)
+        13: (0.0, 0.5)   # PQ (Bus 14)
+    }
+
     fig = go.Figure()
 
     if map_flow_success:
+        # Drawing transmission lines
         for idx, line in net.line.iterrows():
             if not line["in_service"]:
                 continue
@@ -259,14 +318,15 @@ with tab3:
             loading = net.res_line.loc[idx, "loading_percent"]
             p_mw = net.res_line.loc[idx, "p_from_mw"]
             
+            # Color coding (Green=Good, Orange=Heavy, Red=Overloaded)
             if loading >= 100.0:
-                line_color = "#F85149"
+                line_color = "#F85149" # Vibe: Crisis
                 line_width = 3.5
             elif loading >= 70.0:
-                line_color = "#D29922"
+                line_color = "#D29922" # Vibe: Warning
                 line_width = 2.5
             else:
-                line_color = "#3FB950"
+                line_color = "#3FB950" # Vibe: Stable
                 line_width = 2.0
 
             fig.add_trace(go.Scatter(
@@ -274,12 +334,24 @@ with tab3:
                 mode='lines',
                 line=dict(width=line_width, color=line_color),
                 hoverinfo='text',
-                text=f"Line {idx} (Bus {from_bus} -> Bus {to_bus})<br>Loading: {loading:.1f}%<br>Power Flow: {p_mw:.2f} MW"
+                text=f"Line {idx} (Bus {from_bus+1} -> Bus {to_bus+1})<br>Loading: {loading:.1f}%<br>Power Flow: {p_mw:.2f} MW"
             ))
 
+    # CRITIQUE FIX: STRUCTURED NODE & TYPE COLORING
+    # Defining color maps for Bus Types (Slack, PV/Gen, PQ/Load)
+    bus_colors = {
+        'SL': '#FFD700', # Slack (Yellow)
+        'PV': '#F85149', # Generator (Red)
+        'PQ': '#58A6FF'  # Load (Blue)
+    }
+
+    # Extract positions and types
     node_x = [pos[node][0] for node in G.nodes()]
     node_y = [pos[node][1] for node in G.nodes()]
-    bus_labels = [f"Bus {node}" for node in G.nodes()]
+    # Update bus labels to standard IEEE numbering (Bus 1 to Bus 14)
+    bus_labels = [f"Bus {node+1} ({net.bus.loc[node, 'type']})" for node in G.nodes()]
+    bus_types = [net.bus.loc[node, 'type'] for node in G.nodes()]
+    node_colors = [bus_colors[b_type] for b_type in bus_types]
 
     fig.add_trace(go.Scatter(
         x=node_x, y=node_y,
@@ -287,7 +359,7 @@ with tab3:
         hoverinfo='text',
         text=bus_labels,
         textposition="top center",
-        marker=dict(size=18, color='#58A6FF', line=dict(width=1.5, color='#FFFFFF'))
+        marker=dict(size=18, color=node_colors, line=dict(width=1.5, color='#FFFFFF'))
     ))
 
     fig.update_layout(
