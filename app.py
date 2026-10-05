@@ -25,16 +25,15 @@ st.markdown("""
         border-right: 1px solid #30363D !important;
     }
 
-    /* TYPOGRAPHY FIXES FROM CRITIQUE */
-    /* Fix 1: Make top engineering info text sharp, clean, and unbolded (monospace) */
+    /* TYPOGRAPHY FIXES */
     .stMarkdown div p {
         font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
         font-weight: 400 !important;
         letter-spacing: 0.05rem;
     }
 
-    /* Fix 2: Significantly increase font size and contrast of main subtitle */
-    .css-1avcm0n { /* Main caption selector */
+    /* Subtitle styling */
+    .css-1avcm0n { 
         font-size: 1.1rem !important; 
         color: #E6EDF3 !important; 
         margin-bottom: 1rem;
@@ -60,7 +59,7 @@ st.markdown("""
         display: none !important;
     }
 
-    /* CLEAN FLAT BUTTON (Matches design style) */
+    /* CLEAN FLAT BUTTON */
     .stButton>button { 
         width: 100%; 
         background-color: #238636; 
@@ -76,15 +75,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Main Title & Subtitle (EMOJI FREE)
+# Main Title & Subtitle
 st.title("Power Grid N-1 Contingency & ACOPF Optimization Suite")
-# Increased font-size subtitle
 st.caption("Real-time steady-state AC load flow, ACOPF cost optimization dispatch, and interactive N-1 reliability analyzer.")
 
-# CRITIQUE FIX: Engineering Data Callout
-# This is nice on top, now using custom monospace CSS for sharp unbolded font
+# Engineering Data Callout
 st.write("**SYSTEM: IEEE 14-BUS TEST CASE | SYSTEM BASE MVA: 100**")
-
 
 # -------------------------------------------------------------------
 # Sidebar Controls
@@ -100,16 +96,13 @@ min_voltage = st.sidebar.slider("Min Voltage Limit (p.u.)", 0.90, 1.00, 0.95, 0.
 # -------------------------------------------------------------------
 @st.cache_resource
 def get_configured_network():
-    # Base network is IEEE 14-bus test case (statically cached)
     net = pn.case14()
-    # Add bus types explicitly for visualization
-    net.bus.loc[0, 'type'] = 'SL' # Slack
-    for idx in net.ext_grid.bus:
-         net.bus.loc[idx, 'type'] = 'PV' # Gen
-    for idx in net.gen.bus:
-         if net.bus.loc[idx, 'type'] != 'SL':
-              net.bus.loc[idx, 'type'] = 'PV' # Gen
-    net.bus['type'].fillna('PQ', inplace=True) # Load
+    # Explicitly map engineering bus categories (Slack, PV, PQ)
+    net.bus['category'] = 'PQ'
+    if len(net.ext_grid) > 0:
+        net.bus.loc[net.ext_grid.bus.values, 'category'] = 'SL'
+    if len(net.gen) > 0:
+        net.bus.loc[net.gen.bus.values, 'category'] = 'PV'
     return net
 
 base_net = get_configured_network()
@@ -136,7 +129,7 @@ def update_network_parameters(scale, mva_limit, v_min, v_max):
 
 net = update_network_parameters(load_scaling, line_rating_mva, min_voltage, max_voltage)
 
-# Tab Navigation (Emoji Free)
+# Tab Navigation
 tab1, tab2, tab3 = st.tabs(["Grid Dashboard", "ACOPF Optimization", "Interactive Outage Inspector"])
 
 # -------------------------------------------------------------------
@@ -225,7 +218,6 @@ with tab2:
     
     if st.button("Execute ACOPF Dispatch Optimization"):
         try:
-            # Set up polynomial operational cost ($/MWh) for generators
             for poly_cost_type in ['gen', 'ext_grid']:
                 if poly_cost_type in net:
                     net[poly_cost_type].drop(net[poly_cost_type].index, inplace=True)
@@ -234,7 +226,6 @@ with tab2:
                 pp.create_poly_cost(net, g_idx, 'gen', cp1_eur_per_mw=20.0, cp2_eur_per_mw2=0.1)
             pp.create_poly_cost(net, 0, 'ext_grid', cp1_eur_per_mw=10.0, cp2_eur_per_mw2=0.05)
             
-            # Enforce line thermal loading limit (100%)
             net.line["max_loading_percent"] = 100.0
             pp.runopp(net)
             
@@ -269,7 +260,6 @@ with tab3:
         format_func=lambda x: "All Lines In Service (Normal State)" if x == -1 else f"Trip Line {x} (Bus {net.line.loc[x, 'from_bus']} -> Bus {net.line.loc[x, 'to_bus']})"
     )
     
-    # Apply the interactive N-1 outage
     if selected_line != -1:
         net.line.loc[selected_line, "in_service"] = False
         
@@ -283,29 +273,27 @@ with tab3:
     for idx in net.bus.index:
         G.add_node(idx)
 
-    # CRITIQUE FIX: STRUCTURED SINGLE-LINE LAYOUT
-    # Defining specific coordinates (x, y) for IEEE 14-bus diagram layout
+    # Coordinates for IEEE 14-bus single-line diagram layout
     pos = {
         0: (0.0, 1.0),   # Slack (Bus 1)
-        1: (0.5, 1.0),   # PQ (Bus 2)
-        2: (1.0, 1.0),   # PQ (Bus 3)
-        3: (1.5, 1.0),   # PQ (Bus 4)
-        4: (2.0, 1.0),   # PQ (Bus 5)
-        5: (0.5, 0.5),   # PV Gen (Bus 6)
-        6: (1.5, 0.5),   # PQ (Bus 7)
-        7: (2.0, 0.5),   # PQ (Bus 8)
-        8: (1.5, 0.0),   # PQ (Bus 9)
-        9: (2.0, 0.0),   # PQ (Bus 10)
-        10: (0.5, 0.0),  # PQ (Bus 11)
-        11: (1.0, 0.0),  # PQ (Bus 12)
-        12: (1.0, 0.5),  # PQ (Bus 13)
-        13: (0.0, 0.5)   # PQ (Bus 14)
+        1: (0.5, 1.0),   # Bus 2
+        2: (1.0, 1.0),   # Bus 3
+        3: (1.5, 1.0),   # Bus 4
+        4: (2.0, 1.0),   # Bus 5
+        5: (0.5, 0.5),   # Bus 6
+        6: (1.5, 0.5),   # Bus 7
+        7: (2.0, 0.5),   # Bus 8
+        8: (1.5, 0.0),   # Bus 9
+        9: (2.0, 0.0),   # Bus 10
+        10: (0.5, 0.0),  # Bus 11
+        11: (1.0, 0.0),  # Bus 12
+        12: (1.0, 0.5),  # Bus 13
+        13: (0.0, 0.5)   # Bus 14
     }
 
     fig = go.Figure()
 
     if map_flow_success:
-        # Drawing transmission lines
         for idx, line in net.line.iterrows():
             if not line["in_service"]:
                 continue
@@ -318,15 +306,14 @@ with tab3:
             loading = net.res_line.loc[idx, "loading_percent"]
             p_mw = net.res_line.loc[idx, "p_from_mw"]
             
-            # Color coding (Green=Good, Orange=Heavy, Red=Overloaded)
             if loading >= 100.0:
-                line_color = "#F85149" # Vibe: Crisis
+                line_color = "#F85149"
                 line_width = 3.5
             elif loading >= 70.0:
-                line_color = "#D29922" # Vibe: Warning
+                line_color = "#D29922"
                 line_width = 2.5
             else:
-                line_color = "#3FB950" # Vibe: Stable
+                line_color = "#3FB950"
                 line_width = 2.0
 
             fig.add_trace(go.Scatter(
@@ -337,21 +324,21 @@ with tab3:
                 text=f"Line {idx} (Bus {from_bus+1} -> Bus {to_bus+1})<br>Loading: {loading:.1f}%<br>Power Flow: {p_mw:.2f} MW"
             ))
 
-    # CRITIQUE FIX: STRUCTURED NODE & TYPE COLORING
-    # Defining color maps for Bus Types (Slack, PV/Gen, PQ/Load)
+    # Color definitions with default fallback
     bus_colors = {
         'SL': '#FFD700', # Slack (Yellow)
         'PV': '#F85149', # Generator (Red)
         'PQ': '#58A6FF'  # Load (Blue)
     }
 
-    # Extract positions and types
     node_x = [pos[node][0] for node in G.nodes()]
     node_y = [pos[node][1] for node in G.nodes()]
-    # Update bus labels to standard IEEE numbering (Bus 1 to Bus 14)
-    bus_labels = [f"Bus {node+1} ({net.bus.loc[node, 'type']})" for node in G.nodes()]
-    bus_types = [net.bus.loc[node, 'type'] for node in G.nodes()]
-    node_colors = [bus_colors[b_type] for b_type in bus_types]
+    
+    bus_labels = [f"Bus {node+1} ({net.bus.loc[node, 'category']})" for node in G.nodes()]
+    bus_categories = [net.bus.loc[node, 'category'] for node in G.nodes()]
+    
+    # Safe lookup preventing KeyError
+    node_colors = [bus_colors.get(b_cat, '#58A6FF') for b_cat in bus_categories]
 
     fig.add_trace(go.Scatter(
         x=node_x, y=node_y,
