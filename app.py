@@ -7,11 +7,11 @@ import plotly.graph_objects as go
 import networkx as nx
 
 # -------------------------------------------------------------------
-# Page Config & Pure Minimalist Theme (Emoji Free)
+# Page Config & Pure Minimalist Theme
 # -------------------------------------------------------------------
 st.set_page_config(page_title="Power Grid N-1 & ACOPF Analyzer", layout="wide", initial_sidebar_state="expanded")
 
-# CUSTOM CSS: Sets bold engineering metrics, hides links, forces clean monospace for top info
+# Custom CSS for dark minimalist theme and typography
 st.markdown("""
     <style>
     /* SOLID DARK BACKGROUND */
@@ -133,7 +133,7 @@ net = update_network_parameters(load_scaling, line_rating_mva, min_voltage, max_
 tab1, tab2, tab3 = st.tabs(["Grid Dashboard", "ACOPF Optimization", "Interactive Outage Inspector"])
 
 # -------------------------------------------------------------------
-# TAB 1: Grid Dashboard & N-1 Scan
+# TAB 1: Grid Dashboard & Automatic N-1 Scan
 # -------------------------------------------------------------------
 with tab1:
     try:
@@ -162,52 +162,50 @@ with tab1:
     st.divider()
 
     st.subheader("Automated N-1 Contingency Scan")
-    if st.button("Run N-1 Reliability Scan"):
-        results = []
-        num_lines = len(net.line)
-        progress_bar = st.progress(0)
-        
-        # Iterative N-1 loop
-        for i, line_idx in enumerate(net.line.index):
-            net.line.loc[line_idx, "in_service"] = False
-            try:
-                pp.runpp(net, numba=False)
-                active_lines = net.line[net.line.in_service == True].index
-                max_load = net.res_line.loc[active_lines].loading_percent.max()
-                overloads = len(net.res_line.loc[active_lines][net.res_line.loc[active_lines].loading_percent > 100.0])
-                v_violations = len(net.res_bus[(net.res_bus.vm_pu < min_voltage) | (net.res_bus.vm_pu > max_voltage)])
-                status = "CRITICAL" if overloads > 0 or v_violations > 0 else "STABLE"
-                
-                results.append({
-                    "Tripped Line": f"Line {line_idx} (Bus {net.line.loc[line_idx, 'from_bus']} -> Bus {net.line.loc[line_idx, 'to_bus']})",
-                    "Status": status,
-                    "Max Line Loading (%)": round(max_load, 1),
-                    "Overloaded Lines": overloads,
-                    "Voltage Violations": v_violations,
-                    "Losses (MW)": round(net.res_line.pl_mw.sum(), 2)
-                })
-            except Exception:
-                results.append({
-                    "Tripped Line": f"Line {line_idx} (Bus {net.line.loc[line_idx, 'from_bus']} -> Bus {net.line.loc[line_idx, 'to_bus']})",
-                    "Status": "BLACKOUT / DIVERGED",
-                    "Max Line Loading (%)": None,
-                    "Overloaded Lines": None,
-                    "Voltage Violations": None,
-                    "Losses (MW)": None
-                })
-            net.line.loc[line_idx, "in_service"] = True
-            progress_bar.progress((i + 1) / num_lines)
+    
+    # AUTO-RUN: Executes automatically on page load without requiring button press
+    results = []
+    num_lines = len(net.line)
+    
+    for i, line_idx in enumerate(net.line.index):
+        net.line.loc[line_idx, "in_service"] = False
+        try:
+            pp.runpp(net, numba=False)
+            active_lines = net.line[net.line.in_service == True].index
+            max_load = net.res_line.loc[active_lines].loading_percent.max()
+            overloads = len(net.res_line.loc[active_lines][net.res_line.loc[active_lines].loading_percent > 100.0])
+            v_violations = len(net.res_bus[(net.res_bus.vm_pu < min_voltage) | (net.res_bus.vm_pu > max_voltage)])
+            status = "CRITICAL" if overloads > 0 or v_violations > 0 else "STABLE"
             
-        df_results = pd.DataFrame(results)
-        df_results["Max Line Loading (%)"] = df_results["Max Line Loading (%)"].apply(lambda x: f"{x:.1f}" if pd.notnull(x) else x)
-        df_results["Losses (MW)"] = df_results["Losses (MW)"].apply(lambda x: f"{x:.2f}" if pd.notnull(x) else x)
+            results.append({
+                "Tripped Line": f"Line {line_idx} (Bus {net.line.loc[line_idx, 'from_bus']+1} -> Bus {net.line.loc[line_idx, 'to_bus']+1})",
+                "Status": status,
+                "Max Line Loading (%)": round(max_load, 1),
+                "Overloaded Lines": overloads,
+                "Voltage Violations": v_violations,
+                "Losses (MW)": round(net.res_line.pl_mw.sum(), 2)
+            })
+        except Exception:
+            results.append({
+                "Tripped Line": f"Line {line_idx} (Bus {net.line.loc[line_idx, 'from_bus']+1} -> Bus {net.line.loc[line_idx, 'to_bus']+1})",
+                "Status": "BLACKOUT / DIVERGED",
+                "Max Line Loading (%)": None,
+                "Overloaded Lines": None,
+                "Voltage Violations": None,
+                "Losses (MW)": None
+            })
+        net.line.loc[line_idx, "in_service"] = True
+        
+    df_results = pd.DataFrame(results)
+    df_results["Max Line Loading (%)"] = df_results["Max Line Loading (%)"].apply(lambda x: f"{x:.1f}" if pd.notnull(x) else x)
+    df_results["Losses (MW)"] = df_results["Losses (MW)"].apply(lambda x: f"{x:.2f}" if pd.notnull(x) else x)
 
-        def color_status(val):
-            if val == "CRITICAL" or val == "BLACKOUT / DIVERGED":
-                return 'background-color: #3D1414; color: #FF7B7B; font-weight: bold;'
-            return 'background-color: #122B1E; color: #58D68D;'
+    def color_status(val):
+        if val == "CRITICAL" or val == "BLACKOUT / DIVERGED":
+            return 'background-color: #3D1414; color: #FF7B7B; font-weight: bold;'
+        return 'background-color: #122B1E; color: #58D68D;'
 
-        st.dataframe(df_results.style.map(color_status, subset=['Status']), width="stretch")
+    st.dataframe(df_results.style.map(color_status, subset=['Status']), width="stretch")
 
 # -------------------------------------------------------------------
 # TAB 2: ACOPF Cost Minimization Engine
@@ -216,37 +214,37 @@ with tab2:
     st.subheader("AC Optimal Power Flow (ACOPF) Fuel Cost Minimization")
     st.write("ACOPF redispatches generator active power outputs to minimize operational fuel cost while satisfying line thermal ratings and bus voltage limits.")
     
-    if st.button("Execute ACOPF Dispatch Optimization"):
-        try:
-            for poly_cost_type in ['gen', 'ext_grid']:
-                if poly_cost_type in net:
-                    net[poly_cost_type].drop(net[poly_cost_type].index, inplace=True)
+    # AUTO-RUN: Executes automatically on page load without requiring button press
+    try:
+        for poly_cost_type in ['gen', 'ext_grid']:
+            if poly_cost_type in net:
+                net[poly_cost_type].drop(net[poly_cost_type].index, inplace=True)
+        
+        for g_idx in net.gen.index:
+            pp.create_poly_cost(net, g_idx, 'gen', cp1_eur_per_mw=20.0, cp2_eur_per_mw2=0.1)
+        pp.create_poly_cost(net, 0, 'ext_grid', cp1_eur_per_mw=10.0, cp2_eur_per_mw2=0.05)
+        
+        net.line["max_loading_percent"] = 100.0
+        pp.runopp(net)
+        
+        st.success("ACOPF Optimization Converged Successfully!")
+        
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown("**Optimal Generator Active Power Dispatch (MW):**")
+            gen_disp = pd.DataFrame({
+                "Generator": [f"Gen Bus {net.gen.loc[i, 'bus']+1}" for i in net.gen.index] + ["External Grid (Slack)"],
+                "P Dispatch (MW)": list(net.res_gen.p_mw) + list(net.res_ext_grid.p_mw)
+            })
+            st.dataframe(gen_disp, width="stretch")
+        
+        with col_b:
+            st.markdown("**Post-Optimization Line Loading Summary:**")
+            st.metric("Total Generation Cost", f"${net.res_cost:.2f} / hr")
+            st.metric("Max Optimized Line Loading", f"{net.res_line.loading_percent.max():.1f}%")
             
-            for g_idx in net.gen.index:
-                pp.create_poly_cost(net, g_idx, 'gen', cp1_eur_per_mw=20.0, cp2_eur_per_mw2=0.1)
-            pp.create_poly_cost(net, 0, 'ext_grid', cp1_eur_per_mw=10.0, cp2_eur_per_mw2=0.05)
-            
-            net.line["max_loading_percent"] = 100.0
-            pp.runopp(net)
-            
-            st.success("ACOPF Optimization Converged Successfully!")
-            
-            col_a, col_b = st.columns(2)
-            with col_a:
-                st.markdown("**Optimal Generator Active Power Dispatch (MW):**")
-                gen_disp = pd.DataFrame({
-                    "Generator": [f"Gen Bus {net.gen.loc[i, 'bus']}" for i in net.gen.index] + ["External Grid (Slack)"],
-                    "P Dispatch (MW)": list(net.res_gen.p_mw) + list(net.res_ext_grid.p_mw)
-                })
-                st.dataframe(gen_disp, width="stretch")
-            
-            with col_b:
-                st.markdown("**Post-Optimization Line Loading Summary:**")
-                st.metric("Total Generation Cost", f"${net.res_cost:.2f} / hr")
-                st.metric("Max Optimized Line Loading", f"{net.res_line.loading_percent.max():.1f}%")
-                
-        except Exception as e:
-            st.error(f"ACOPF Diverged: {e}. Network is heavily congested under current load scale.")
+    except Exception as e:
+        st.error(f"ACOPF Diverged: {e}. Network is heavily congested under current load scale.")
 
 # -------------------------------------------------------------------
 # TAB 3: Interactive Single-Line Diagram Outage Inspector
@@ -257,7 +255,7 @@ with tab3:
     selected_line = st.selectbox(
         "Select a Transmission Line to Trip (Simulate Specific N-1 Outage):",
         options=[-1] + list(net.line.index),
-        format_func=lambda x: "All Lines In Service (Normal State)" if x == -1 else f"Trip Line {x} (Bus {net.line.loc[x, 'from_bus']} -> Bus {net.line.loc[x, 'to_bus']})"
+        format_func=lambda x: "All Lines In Service (Normal State)" if x == -1 else f"Trip Line {x} (Bus {net.line.loc[x, 'from_bus']+1} -> Bus {net.line.loc[x, 'to_bus']+1})"
     )
     
     if selected_line != -1:
@@ -293,16 +291,17 @@ with tab3:
 
     fig = go.Figure()
 
-    if map_flow_success:
-        for idx, line in net.line.iterrows():
-            if not line["in_service"]:
-                continue
-                
-            from_bus = line["from_bus"]
-            to_bus = line["to_bus"]
-            x0, y0 = pos[from_bus]
-            x1, y1 = pos[to_bus]
+    # FIX 1: ALWAYS RENDER TRANSMISSION LINE EDGES
+    for idx, line in net.line.iterrows():
+        if not line["in_service"]:
+            continue
             
+        from_bus = line["from_bus"]
+        to_bus = line["to_bus"]
+        x0, y0 = pos[from_bus]
+        x1, y1 = pos[to_bus]
+        
+        if map_flow_success:
             loading = net.res_line.loc[idx, "loading_percent"]
             p_mw = net.res_line.loc[idx, "p_from_mw"]
             
@@ -315,16 +314,21 @@ with tab3:
             else:
                 line_color = "#3FB950"
                 line_width = 2.0
+            hover_text = f"Line {idx} (Bus {from_bus+1} -> Bus {to_bus+1})<br>Loading: {loading:.1f}%<br>Power Flow: {p_mw:.2f} MW"
+        else:
+            line_color = "#8B949E"
+            line_width = 2.0
+            hover_text = f"Line {idx} (Bus {from_bus+1} -> Bus {to_bus+1})<br>Status: Out of Service / Diverged"
 
-            fig.add_trace(go.Scatter(
-                x=[x0, x1], y=[y0, y1],
-                mode='lines',
-                line=dict(width=line_width, color=line_color),
-                hoverinfo='text',
-                text=f"Line {idx} (Bus {from_bus+1} -> Bus {to_bus+1})<br>Loading: {loading:.1f}%<br>Power Flow: {p_mw:.2f} MW"
-            ))
+        fig.add_trace(go.Scatter(
+            x=[x0, x1], y=[y0, y1],
+            mode='lines',
+            line=dict(width=line_width, color=line_color),
+            hoverinfo='text',
+            text=hover_text
+        ))
 
-    # Color definitions with default fallback
+    # Bus Color mappings
     bus_colors = {
         'SL': '#FFD700', # Slack (Yellow)
         'PV': '#F85149', # Generator (Red)
@@ -337,7 +341,6 @@ with tab3:
     bus_labels = [f"Bus {node+1} ({net.bus.loc[node, 'category']})" for node in G.nodes()]
     bus_categories = [net.bus.loc[node, 'category'] for node in G.nodes()]
     
-    # Safe lookup preventing KeyError
     node_colors = [bus_colors.get(b_cat, '#58A6FF') for b_cat in bus_categories]
 
     fig.add_trace(go.Scatter(
